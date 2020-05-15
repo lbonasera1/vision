@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.autograd import Function
 from .utils import load_state_dict_from_url
 
 
@@ -9,6 +10,21 @@ __all__ = ['AlexNet', 'alexnet']
 model_urls = {
     'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
 }
+
+class ReverseLayerF(Function):
+    # Forwards identity
+    # Sends backward reversed gradients
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        output = grad_output.neg() * ctx.alpha
+
+        return output, None
 
 
 class AlexNet(nn.Module):
@@ -40,13 +56,29 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(4096, num_classes),
         )
+        self.dann_classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, num_classes),
+        )
 
-    def forward(self, x):
+    def forward(self, x, alpha=None):
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-        x = self.classifier(x)
-        return x
+        
+        if alpha is not None:
+            reverse_features = ReverseLayerF.apply(x, alpha)
+            discriminator_output = self.dann_classifier(reverse_features)
+            return discriminator_output
+        
+        else:
+            x = self.classifier(x)
+            return x
 
 
 def alexnet(pretrained=False, progress=True, **kwargs):
@@ -60,6 +92,16 @@ def alexnet(pretrained=False, progress=True, **kwargs):
     model = AlexNet(**kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls['alexnet'],
+                                              strict=False,
                                               progress=progress)
         model.load_state_dict(state_dict)
+        model.dann_classifier[1].weight.data = model.classifier[1].weight.data
+        model.dann_classifier[1].bias.data = model.classifier[1].bias.data
+        
+        model.dann_classifier[4].weight.data = model.classifier[4].weight.data
+        model.dann_classifier[4].bias.data = model.classifier[4].bias.data
+        
+        model.dann_classifier[6].weight.data = model.classifier[6].weight.data
+        model.dann_classifier[6].bias.data = model.classifier[6].bias.data
     return model
+
