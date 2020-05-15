@@ -94,7 +94,7 @@ def alexnet(pretrained=False, progress=True, **kwargs):
         state_dict = load_state_dict_from_url(model_urls['alexnet'],
                                               strict=False,
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
         model.dann_classifier[1].weight.data = model.classifier[1].weight.data
         model.dann_classifier[1].bias.data = model.classifier[1].bias.data
         
