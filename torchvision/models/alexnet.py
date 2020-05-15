@@ -95,7 +95,7 @@ def alexnet(pretrained=False, progress=True, **kwargs):
                                               progress=progress)
         model.load_state_dict(state_dict, strict=False)
         
-        model.dann_classifier[6] = nn.Linear(4096, num_classes)
+        model.dann_classifier[6] = nn.Linear(4096, 1000)
         model.dann_classifier.load_state_dict(model.classifier.state_dict())
         model.dann_classifier[6] = nn.Linear(4096, 2)
     return model
